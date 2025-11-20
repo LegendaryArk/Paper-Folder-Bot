@@ -35,9 +35,9 @@ endif
 VEX_SDK_PATH ?= ${HOME}/sdk
 
 # printf_float flag name passed from app
-ifeq ("$(origin PRINTF_FLOAT)", "command line")
+# ifeq ("$(origin PRINTF_FLOAT)", "command line")
 PRINTF_FLAG = -u_printf_float
-endif
+# endif
 
 # Verbose flag passed from app
 ifeq ("$(origin V)", "command line")
