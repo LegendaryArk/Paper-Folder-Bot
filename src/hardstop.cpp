@@ -2,13 +2,13 @@
 
 using namespace vex;
 
-Hardstop::Hardstop(Motor& motor, double kp, double ki, double kd, vex::timer& timer)
-	: motor(motor), pid(kp, ki, kd, timer), timer(timer) {
+Hardstop::Hardstop(Motor& motor, double kp, double ki, double kd, double minFoldPos, double maxFoldPos, double maxEnc, vex::timer& timer)
+	: motor(motor), pid(kp, ki, kd, timer), minFoldPos(minFoldPos), maxFoldPos(maxFoldPos), maxEnc(maxEnc), timer(timer) {
 	motor.setBrake(brakeType::coast);
 }
 
 void Hardstop::setTarget(double foldPos, double maxPower) {
-	this->tgtPos = 43.056 * foldPos - 6.985;
+	this->tgtPos = (maxEnc / (maxFoldPos - minFoldPos)) * (foldPos - minFoldPos + 1.1);
 	this->maxPower = maxPower;
 }
 
@@ -23,7 +23,7 @@ void Hardstop::update() {
 	motor.setMaxTorque(100, percentUnits::pct);
 	motor.spin(directionType::fwd);
 
-	printf("tgt: %.2f, act: %.2f, ctrl: %.2f\n", tgtPos, motor.position(rotationUnits::raw), ctrl);
+	// printf("tgt: %.2f, act: %.2f, ctrl: %.2f\n", tgtPos, motor.position(rotationUnits::raw), ctrl);
 }
 
 bool Hardstop::isSettled(double posThreshold, double velThreshold) const {

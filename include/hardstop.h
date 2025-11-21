@@ -8,6 +8,11 @@ class Hardstop {
 		Motor& motor;
 		PidController pid;
 
+		double minFoldPos;
+		double maxFoldPos;
+
+		double maxEnc;
+
 		double tgtPos = 0;
 		double maxPower = 50;
 
@@ -16,7 +21,7 @@ class Hardstop {
 		vex::timer& timer;
 
 	public:
-		Hardstop(Motor& motor, double kp, double ki, double kd, vex::timer& timer);
+		Hardstop(Motor& motor, double kp, double ki, double kd, double min_fold_pos, double max_fold_pos, double maxEnc, vex::timer& timer);
 
 		void setTarget(double foldPos, double maxPower = 60);
 
@@ -29,6 +34,6 @@ class Hardstop {
 
 		inline void stop() { motor.stop(); };
 
-		const static double MIN_FOLD_POS_CM = 6.99;
-		const static double MAX_FOLD_POS_CM = 17.46;
+		inline double getMinFoldPos() { return minFoldPos; };
+		inline double getMaxFoldPos() { return maxFoldPos; };
 };

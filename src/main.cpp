@@ -15,9 +15,9 @@ vex::distance distanceSensor(vex::PORT2);
 vex::optical opticalSensor(vex::PORT5);
 vex::touchled touchLed(vex::PORT4);
 
-Feeder feeder(feederMotor, distanceSensor, brain.Timer);
-Hardstop hardstop1(hardstop1Motor, 0.02, 0.015, 0.0013, brain.Timer);
-Hardstop hardstop2(hardstop2Motor, 0.02, 0.015, 0.0013, brain.Timer);
+Feeder feeder(feederMotor, distanceSensor, brain.Timer, controller);
+Hardstop hardstop1(hardstop1Motor, 0.02, 0.015, 0.0013, 7.2, 17.1, 1352, brain.Timer);
+Hardstop hardstop2(hardstop2Motor, 0.02, 0.015, 0.0015, 8.5, 17.4, 1262, brain.Timer);
 
 void inputFoldLocations(double& fold1, double& fold2) {
     brain.Screen.clearScreen();
@@ -59,8 +59,8 @@ void inputFoldLocations(double& fold1, double& fold2) {
         if (controller.ButtonEDown.pressing() && !resetPressed) {
             resetPressed = true;
         } else if (!controller.ButtonEDown.pressing() && resetPressed) {
-            fold1 = Hardstop::MIN_FOLD_POS_CM;
-            fold2 = Hardstop::MIN_FOLD_POS_CM * 2;
+            fold1 = ceil(hardstop1.getMinFoldPos());
+            fold2 = ceil(hardstop2.getMinFoldPos() + fold1);
             resetPressed = false;
         }
 
@@ -84,14 +84,22 @@ void inputFoldLocations(double& fold1, double& fold2) {
             if (btns[i]->pressing() && brain.Timer.value() - pressSt[i] >= 0.5) {
                 if (i % 2)
                     *foldLocs[i / 2] -= precision;
-                else
+                else if (*foldLocs[0] + *foldLocs[1] + precision < 28)
                     *foldLocs[i / 2] += precision;
+                
+                if (*foldLocs[1] - *foldLocs[0] < hardstop1.getMinFoldPos()) {
+                    *foldLocs[((i / 2) + 1) % 2] = *foldLocs[i / 2] + copysign(hardstop1.getMinFoldPos(), 1 - i);
+                }
             } else if (!btns[i]->pressing()) {
                 if (brain.Timer.value() - pressSt[i] < 0.5) {
                     if (i % 2)
                         *foldLocs[i / 2] -= precision;
-                    else
+                    else if (*foldLocs[0] + *foldLocs[1] + precision < 28)
                         *foldLocs[i / 2] += precision;
+                    
+                    if (*foldLocs[1] - *foldLocs[0] < hardstop1.getMinFoldPos()) {
+                        *foldLocs[((i / 2) + 1) % 2] = *foldLocs[i / 2] + copysign(hardstop1.getMinFoldPos(), 1 - i);
+                    }
                 }
                 pressSt[i] = 0;
             }
@@ -112,8 +120,21 @@ void inputFoldLocations(double& fold1, double& fold2) {
             precisionDebounce[1] = false;
         }
 
-        for (int i = 0; i < 2; i++) {
-            *foldLocs[i] = Util::clamp(*foldLocs[i], Hardstop::MIN_FOLD_POS_CM + Hardstop::MAX_FOLD_POS_CM * i, Hardstop::MAX_FOLD_POS_CM * (i + 1));
+        fold1 = Util::clamp(fold1, hardstop1.getMinFoldPos(), hardstop1.getMaxFoldPos());
+        fold2 = Util::clamp(fold2, hardstop2.getMinFoldPos() + hardstop1.getMinFoldPos(), hardstop2.getMaxFoldPos() + hardstop1.getMaxFoldPos());
+
+        if (fold2 - fold1 < fold1) {
+            brain.Screen.setCursor(6, 1);
+            brain.Screen.clearLine();
+            brain.Screen.print("Folds overlap:");
+            brain.Screen.setCursor(7, 1);
+            brain.Screen.clearLine();
+            brain.Screen.print("Will cause 3 folds");
+        } else {
+            brain.Screen.setCursor(6, 1);
+            brain.Screen.clearLine();
+            brain.Screen.setCursor(7, 1);
+            brain.Screen.clearLine();
         }
 
         wait(100, vex::msec);
@@ -168,9 +189,11 @@ int main() {
         wait(50, vex::msec);
     }
 
-	double fold1Location = Hardstop::MIN_FOLD_POS_CM;
-    double fold2Location = Hardstop::MIN_FOLD_POS_CM * 2;
+	double fold1Location = ceil(hardstop1.getMinFoldPos());
+    double fold2Location = ceil(hardstop2.getMinFoldPos() + fold1Location);
     inputFoldLocations(fold1Location, fold2Location);
+
+    printf("Fold Locations: %.1f, %.1f\n", fold1Location, fold2Location);
 
     brain.Screen.clearLine(3);
     brain.Screen.clearLine(5);
@@ -182,7 +205,7 @@ int main() {
     hardstop1.setTarget(fold1Location);
     hardstop2.setTarget(fold2Location - fold1Location);
 
-    while (!hardstop1.isSettled()) {
+    while (!hardstop1.isSettled() || !hardstop2.isSettled()) {
         hardstop1.update();
         hardstop2.update();
         wait(20, vex::msec);
@@ -191,11 +214,14 @@ int main() {
     hardstop1.stop();
     hardstop2.stop();
 
+    printf("%f, %f\n", hardstop1Motor.position(vex::rotationUnits::raw), hardstop2Motor.position(vex::rotationUnits::raw));
+
     brain.Screen.setCursor(4, 1);
     brain.Screen.clearLine();
     brain.Screen.print("Folding...");
 
-    rollers.setVelocity(60, vex::velocityUnits::rpm);
+    rollers.setMaxTorque(100, vex::percentUnits::pct);
+    rollers.setVelocity(80, vex::velocityUnits::rpm);
     rollers.spin(vex::directionType::fwd);
 
     int numPaper = 0;
@@ -203,13 +229,15 @@ int main() {
     brain.Screen.clearLine();
     brain.Screen.print("Folding... %d", numPaper);
 
+    bool paused = false;
+
     double indexTime = 0;
     bool isTrayEmpty = false;
     bool isJammed = false;
     while (!isTrayEmpty && !isJammed) {
-        isTrayEmpty = !feeder.index(40, 10);
+        isTrayEmpty = !feeder.index(40, 3, paused);
 
-        if (!isTrayEmpty) {
+        if (!paused && !isTrayEmpty) {
             indexTime = brain.Timer.value();
 
             numPaper++;
@@ -218,14 +246,37 @@ int main() {
             brain.Screen.print("Folding... %d", numPaper);
 
             bool isClear = false, paperDetected = false;
-            while (!isClear && brain.Timer.value() - indexTime < 20 && !isJammed) {
+            while (!isClear && brain.Timer.value() - indexTime < 10 && !isJammed) {
                 if (opticalSensor.isNearObject() && !paperDetected)
                     paperDetected = true;
                 if (paperDetected && !opticalSensor.isNearObject())
                     isClear = true;
-
-                if (rollers.isStalling(20, 50)) {
+                else if (!opticalSensor.isNearObject())
+                    paperDetected = false;
+                
+                if (controller.ButtonEUp.pressing()) {
                     rollers.stop();
+                    feeder.stop();
+                    while (controller.ButtonEUp.pressing()) {
+                        printf("Paused 1\n");
+                        wait(100, vex::msec);
+                    }
+                    while (!controller.ButtonEUp.pressing()) {
+                        printf("Paused 2\n");
+                        wait(100, vex::msec);
+                    }
+                    while (controller.ButtonEUp.pressing()) {
+                        printf("Paused 3\n");
+                        wait(100, vex::msec);
+                    }
+                    rollers.setVelocity(80, vex::velocityUnits::rpm);
+                    rollers.spin(vex::directionType::fwd);
+                    indexTime = brain.Timer.value();
+                }
+
+                if (rollers.isStalling(60, 70)) {
+                    rollers.stop();
+                    printf("Rollers stalled: %f, %f\n", rollers.velocity(vex::velocityUnits::rpm), rollers.current(vex::percentUnits::pct));
                     isJammed = true;
                     errorCode = 1;
                 }
@@ -233,11 +284,13 @@ int main() {
                 wait(20, vex::msec);
             }
 
-            if (brain.Timer.value() - indexTime >= 20) {
+            if (brain.Timer.value() - indexTime >= 10) {
                 isJammed = true;
                 errorCode = 2;
             }
         }
+
+        paused = false;
     }
 
     rollers.stop();
