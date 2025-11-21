@@ -17,7 +17,7 @@ vex::touchled touchLed(vex::PORT4);
 
 Feeder feeder(feederMotor, distanceSensor, brain.Timer, controller);
 Hardstop hardstop1(hardstop1Motor, 0.02, 0.015, 0.0013, 7.2, 17.1, 1352, brain.Timer);
-Hardstop hardstop2(hardstop2Motor, 0.02, 0.015, 0.0015, 8.5, 17.4, 1262, brain.Timer);
+Hardstop hardstop2(hardstop2Motor, 0.019, 0.015, 0.002, 8.5, 17.4, 1262, brain.Timer);
 
 void inputFoldLocations(double& fold1, double& fold2) {
     brain.Screen.clearScreen();
@@ -59,8 +59,8 @@ void inputFoldLocations(double& fold1, double& fold2) {
         if (controller.ButtonEDown.pressing() && !resetPressed) {
             resetPressed = true;
         } else if (!controller.ButtonEDown.pressing() && resetPressed) {
-            fold1 = ceil(hardstop1.getMinFoldPos());
-            fold2 = ceil(hardstop2.getMinFoldPos() + fold1);
+            fold1 = 9;
+            fold2 = 19;
             resetPressed = false;
         }
 
@@ -84,7 +84,7 @@ void inputFoldLocations(double& fold1, double& fold2) {
             if (btns[i]->pressing() && brain.Timer.value() - pressSt[i] >= 0.5) {
                 if (i % 2)
                     *foldLocs[i / 2] -= precision;
-                else if (*foldLocs[0] + *foldLocs[1] + precision < 28)
+                else
                     *foldLocs[i / 2] += precision;
                 
                 if (*foldLocs[1] - *foldLocs[0] < hardstop1.getMinFoldPos()) {
@@ -94,7 +94,7 @@ void inputFoldLocations(double& fold1, double& fold2) {
                 if (brain.Timer.value() - pressSt[i] < 0.5) {
                     if (i % 2)
                         *foldLocs[i / 2] -= precision;
-                    else if (*foldLocs[0] + *foldLocs[1] + precision < 28)
+                    else
                         *foldLocs[i / 2] += precision;
                     
                     if (*foldLocs[1] - *foldLocs[0] < hardstop1.getMinFoldPos()) {
@@ -173,6 +173,14 @@ void displayError(int errorCode) {
                 wait(500, vex::msec);
             }
             break;
+        case 3:
+            brain.Screen.clearScreen();
+            brain.Screen.setCursor(3, 1);
+            brain.Screen.print("Output Tray Full!");
+            
+            touchLed.setBlink(vex::color::blue, 0.5, 0.5);
+            brain.playSound(vex::alarm2);
+            break;
     }
 }
 
@@ -189,8 +197,8 @@ int main() {
         wait(50, vex::msec);
     }
 
-	double fold1Location = ceil(hardstop1.getMinFoldPos());
-    double fold2Location = ceil(hardstop2.getMinFoldPos() + fold1Location);
+	double fold1Location = 9;
+    double fold2Location = 19;
     inputFoldLocations(fold1Location, fold2Location);
 
     printf("Fold Locations: %.1f, %.1f\n", fold1Location, fold2Location);
@@ -245,28 +253,44 @@ int main() {
             brain.Screen.clearLine();
             brain.Screen.print("Folding... %d", numPaper);
 
-            bool isClear = false, paperDetected = false;
-            while (!isClear && brain.Timer.value() - indexTime < 10 && !isJammed) {
-                if (opticalSensor.isNearObject() && !paperDetected)
+            bool isClear = false, paperDetected = false, outputFull = false;
+            int cnt = 0;
+            while (!isClear && !outputFull && brain.Timer.value() - indexTime < 10 && !isJammed) {
+                if (opticalSensor.isNearObject()) {
                     paperDetected = true;
-                if (paperDetected && !opticalSensor.isNearObject())
+                    cnt++;
+                } else {
+                    cnt = 0;
+                }
+                if (paperDetected && !opticalSensor.isNearObject()) {
                     isClear = true;
-                else if (!opticalSensor.isNearObject())
-                    paperDetected = false;
+                    cnt = 0;
+                }
+
+                printf("Optical: %d, cnt: %d\n", opticalSensor.isNearObject(), cnt);
+
+                if (opticalSensor.isNearObject() && cnt >= 150) {
+                    outputFull = true;
+                    rollers.stop();
+                    errorCode = 3;
+                    displayError(errorCode = 3);
+                    while (!touchLed.pressing()) {}
+                    errorCode = 0;
+                    indexTime = brain.Timer.value();
+                    rollers.setVelocity(80, vex::velocityUnits::rpm);
+                    rollers.spin(vex::directionType::fwd);
+                }
                 
                 if (controller.ButtonEUp.pressing()) {
                     rollers.stop();
                     feeder.stop();
                     while (controller.ButtonEUp.pressing()) {
-                        printf("Paused 1\n");
                         wait(100, vex::msec);
                     }
                     while (!controller.ButtonEUp.pressing()) {
-                        printf("Paused 2\n");
                         wait(100, vex::msec);
                     }
                     while (controller.ButtonEUp.pressing()) {
-                        printf("Paused 3\n");
                         wait(100, vex::msec);
                     }
                     rollers.setVelocity(80, vex::velocityUnits::rpm);

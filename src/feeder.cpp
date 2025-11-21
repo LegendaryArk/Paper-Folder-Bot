@@ -20,7 +20,7 @@ bool Feeder::index(double power, double timeout, bool& paused) {
 
 	int cnt = 0;
 	bool trayEmpty = false;
-	while (cnt < 20 && !trayEmpty) {
+	while (cnt < 15 && !trayEmpty) {
 		if (isIndexingPaper())
 			cnt++;
 		
