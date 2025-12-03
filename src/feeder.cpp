@@ -2,55 +2,43 @@
 
 using namespace vex;
 
-Feeder::Feeder(Motor& motor, distance& distanceSensor, vex::timer& timer, vex::controller& controller)
-	: motor(motor), distanceSensor(distanceSensor), timer(timer), controller(controller) {
-	motor.setBrake(brakeType::coast);	
+Feeder::Feeder(Motor& motor, distance& distanceSensor, vex::timer& timer)
+	: Motor(motor), distanceSensor(distanceSensor), timer(timer)
+{
+	setBrake(brakeType::coast);	
 }
 
-bool Feeder::isIndexingPaper() const {
+bool Feeder::isIndexingPaper() const
+{
 	return distanceSensor.objectDistance(distanceUnits::mm) < PAPER_DETECTION_DISTANCE_MM;
 }
 
-bool Feeder::index(double power, double timeout, bool& paused) {
-	motor.setMaxTorque(100, percentUnits::pct);
-	motor.setVelocity(power, velocityUnits::rpm);
-	motor.spin(directionType::fwd);
+bool Feeder::index(double power)
+{
+	setMaxTorque(100, percentUnits::pct);
+	setVelocity(power, velocityUnits::rpm);
+	spin(directionType::fwd);
 	
-	double st = timer.value();
+	static double st = -1;
 
-	int cnt = 0;
-	bool trayEmpty = false;
-	while (cnt < 15 && !trayEmpty) {
-		if (isIndexingPaper())
-			cnt++;
-		
-		if (timer.value() - st > timeout && cnt == 0)
-			trayEmpty = true;
-		
-		if (controller.ButtonEUp.pressing()) {
-			motor.stop();
-			paused = true;
-			while (controller.ButtonEUp.pressing()) {}
-			while (!controller.ButtonEUp.pressing()) {}
-			while (controller.ButtonEUp.pressing()) {}
-			return true;
-		}
-		
-		wait(50, msec);
+	if (isIndexingPaper())
+		st = timer.value();
+	else
+		st = -1;
+
+	if (timer.value() - st >= 3 && st != -1)
+	{
+		stop();
+		st = -1;
+		wait(100, msec);
+
+		setMaxTorque(30, percentUnits::pct);
+		setVelocity(50, velocityUnits::rpm);
+		spin(directionType::rev);
+		wait(700, msec);
+		stop();
+		return true;
 	}
 
-	if (trayEmpty) {
-		motor.stop();
-		return false;
-	}
-
-	motor.stop();
-	wait(100, msec);
-
-	motor.setMaxTorque(30, percentUnits::pct);
-	motor.setVelocity(40, velocityUnits::pct);
-	motor.spin(directionType::rev);
-	wait(700, msec);
-	motor.stop();
-	return true;
+	return false;
 }

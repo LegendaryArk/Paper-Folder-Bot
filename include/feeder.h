@@ -3,22 +3,18 @@
 #include "vex.h"
 #include "motor.h"
 
-class Feeder {
-	private:
-		Motor& motor;
-		vex::distance& distanceSensor;
-		vex::timer& timer;
+class Feeder : public Motor
+{
+private:
+	vex::distance& distanceSensor;
+	vex::timer& timer;
 
-		vex::controller controller;
+	const static double PAPER_DETECTION_DISTANCE_MM = 80;
 
-		const double PAPER_DETECTION_DISTANCE_MM = 80;
-	
-		bool isIndexingPaper() const;
+public:
+	Feeder(Motor& motor, vex::distance& distanceSensor, vex::timer& timer);
 
-	public:
-		Feeder(Motor& motor, vex::distance& distanceSensor, vex::timer& timer, vex::controller& controller);
+	bool isIndexingPaper() const;
 
-		bool index(double power = 50, double timeout = 10, bool& paused = *(new bool(false)));
-
-		inline void stop() { motor.stop(); };
+	bool index(double power);
 };

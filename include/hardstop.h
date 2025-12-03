@@ -3,37 +3,38 @@
 #include "motor.h"
 #include "pid_controller.h"
 
-class Hardstop {
-	private:
-		Motor& motor;
-		PidController pid;
+class Hardstop : public Motor
+{
+private:
+	PidController pid;
 
-		double minFoldPos;
-		double maxFoldPos;
+	double minFoldPos;
+	double maxFoldPos;
 
-		double maxEnc;
+	double maxEnc;
 
-		double tgtPos = 0;
-		double maxPower = 50;
+	double tgtPos = 0;
+	double maxPower = 50;
 
-		bool calibrated = false;
+	bool calibrated = false;
 
-		vex::timer& timer;
+	vex::timer& timer;
 
-	public:
-		Hardstop(Motor& motor, double kp, double ki, double kd, double min_fold_pos, double max_fold_pos, double maxEnc, vex::timer& timer);
+public:
+	Hardstop(Motor& motor, double kp, double ki, double kd, double minFoldPos, double maxFoldPos, double maxEnc, vex::timer& timer);
 
-		void setTarget(double foldPos, double maxPower = 60);
+	void setTarget(double foldPos, double maxPower = 60);
 
-		void update();
+	void update();
 
-		bool isSettled(double posThreshold = 3, double velThreshold = 20) const;
+	bool isSettled(double posThreshold = 3, double velThreshold = 20);
 
-		void calibrate();
-		inline bool isCalibrated() const { return calibrated; };
+	void calibrate();
+	inline bool isCalibrated() const
+		{ return calibrated; };
 
-		inline void stop() { motor.stop(); };
-
-		inline double getMinFoldPos() { return minFoldPos; };
-		inline double getMaxFoldPos() { return maxFoldPos; };
+	inline double getMinFoldPos() const
+		{ return minFoldPos; };
+	inline double getMaxFoldPos() const
+		{ return maxFoldPos; };
 };
